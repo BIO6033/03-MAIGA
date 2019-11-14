@@ -1,0 +1,209 @@
+---
+title: "Red wine white wine pred"
+author: "Maiga"
+date: "12/11/2019"
+output:
+  html_document:
+    keep_md: yes
+  pdf_document: default
+---
+#Packages
+```{r}
+library(tidyverse)
+library(caret)
+library(ggplot2)
+library(e1071)
+library(rpart)
+library(randomForest)
+```
+
+#data
+```{r}
+redwine <- readr::read_delim("https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-red.csv", delim = ";")
+
+whitewine <- readr::read_delim("https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-white.csv", delim = ";")
+
+#Used to fixe names
+names(redwine) <- janitor::make_clean_names(names(redwine))
+names(whitewine) <- janitor::make_clean_names(names(whitewine))
+View(redwine)
+View(whitewine)
+
+```
+Same number of columns and names of columns for both dataset
+
+#Need to put quality as factor to avoid complications later
+```{r}
+head(redwine)
+redwine$quality = as.factor(redwine$quality)
+head(redwine)
+whitewine$quality = as.factor(whitewine$quality)
+head(whitewine)
+```
+
+#Data visualization and inspection
+  #Missing values
+```{r}
+length(which(!complete.cases(redwine)))
+length(which(!complete.cases(whitewine)))
+```
+  #Visualization redwine
+  
+```{r}
+redwine %>% gather(var, value, -quality) %>%
+  ggplot(aes(quality, value, fill = quality)) +
+  geom_boxplot() +
+  facet_wrap('var', scales = "free", ncol = 3)
+  
+
+```
+
+#Visualization whitewine
+```{r}
+whitewine %>% gather(var, value, -quality) %>%
+  ggplot(aes(quality, value, fill = quality)) +
+  geom_boxplot() +
+  facet_wrap('var', scales = "free", ncol = 3)
+  
+
+
+```
+# Data partition
+```{r}
+set.seed(2) # makes the random selection of rows reproducible
+train1 <- redwine$quality %>%
+          createDataPartition(p = 0.70, list = FALSE)
+#head(train)
+
+redTrain <- redwine[train1,]
+redTest <- redwine[-train1,]
+
+
+head(redTest)
+```
+
+
+#rpart on red wine, training
+```{r}
+fitRed <- rpart(quality ~ ., data = redTrain)
+fitRed
+plot(fitRed)
+text(fitRed,cex = 0.8)
+```
+#Testing on redwine
+```{r}
+predRed <- predict(fitRed, newdata = redTest)
+#confusionMatrix(data = predRed,reference =redTest$quality)
+typeof(predRed)
+```
+Probleme avec la matrice de confusion pas les memes types de donnees.
+
+#random forest on red wine, training
+```{r}
+fitrr <- randomForest(quality ~ ., data = redTrain)
+fitrr
+plot(fitrr)
+```
+#Testing on redwine
+```{r}
+predRedr <- predict(fitrr, newdata = redTest)
+confusionMatrix(data = predRedr,reference =redTest$quality)
+typeof(predRedr)
+```
+
+#Rpart on white wine
+  #Data partition
+```{r}
+set.seed(3) # makes the random selection of rows reproducible
+train2 <- whitewine$quality %>%
+          createDataPartition(p = 0.70, list = FALSE)
+#head(train)
+
+wTrain <- whitewine[train2,]
+wTest <- whitewine[-train2,]
+
+
+head(wTest)
+```
+
+```{r}
+fitWhite <- rpart(quality ~ ., data = wTrain)
+fitWhite
+plot(fitWhite)
+text(fitWhite,cex = 0.8)
+```
+#Testing on white wine
+```{r}
+predwhite <- predict(fitWhite, newdata = wTest)
+#confusionMatrix(data = predRed,reference =redTest$quality)
+typeof(predwhite)
+```
+
+#New columns in red and white
+```{r}
+#red wine
+redwine$type = 'red' #create a new columns
+redwine$type = as.factor(redwine$type) #convert it into factor
+glimpse(redwine)
+#white wine
+whitewine$type = 'white' #create a new columns
+whitewine$type = as.factor(whitewine$type) #convert it into factor
+glimpse(whitewine)
+
+```
+
+#Joinning red and white
+```{r}
+redwhite = full_join(redwine, whitewine)
+glimpse(redwhite)
+
+```
+
+#As factor again don't know why it didn't conserve the modification
+```{r}
+redwhite$type = as.factor(redwhite$type) #convert it into factor
+redwhite$quality = as.factor(redwhite$quality) #convert it into factor
+glimpse(redwhite)
+```
+
+#Random forest on join data to predict wine type.
+
+# 1-Data partition
+```{r}
+set.seed(6) # makes the random selection of rows reproducible
+train <- redwhite$type %>%
+          createDataPartition(p = 0.70, list = FALSE)
+#head(train)
+
+rwTrain <- redwhite[train,]
+rwTest <- redwhite[-train,]
+
+
+head(rwTrain)
+```
+
+#Train
+```{r}
+fit3 <- randomForest(type~., data = rwTrain) 
+plot(fit3)
+```
+# Test data and confusion matrix
+```{r}
+pred <- predict(fit3, newdata = rwTest)
+confusionMatrix(data = pred,reference =rwTest$type)
+#View(pred)
+```
+
+#Quality of wine from joined data
+
+```{r}
+fit4 <- randomForest(quality~., data = rwTrain) 
+plot(fit4)
+```
+
+#Testing
+```{r}
+pred2 <- predict(fit4, newdata = rwTest)
+confusionMatrix(data = pred2,reference =rwTest$quality)
+```
+

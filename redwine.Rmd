@@ -1,0 +1,140 @@
+---
+title: "wine regression trees"
+author: "Maiga"
+date: "12/11/2019"
+output:
+  html_document:
+    keep_md: yes
+  pdf_document: default
+---
+#packages
+```{r}
+library(tidyverse)
+library(caret)
+library(ggplot2)
+library(e1071)
+library(rpart)
+```
+
+# data
+```{r}
+redwine <- readr::read_delim("https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-red.csv", delim = ";")
+
+head(names(redwine))
+```
+
+```{r}
+names(redwine) <- janitor::make_clean_names(names(redwine))
+head(names (redwine))
+```
+
+```{r}
+redwine %>% 
+  pivot_longer(everything(), names_to = "var", values_to = "value") %>% 
+  ggplot(aes(x = var, y = value)) + 
+  geom_boxplot()
+
+redwine %>% gather(var, value, -quality) %>%
+  ggplot(aes(quality, value, group = quality)) +
+  geom_boxplot() +
+  facet_wrap(~value, scales = "free", ncol = 4) +
+  theme(axis.text.x = element_blank(), legend.position="bottom")
+
+```
+
+# missing values
+```{r}
+length(which(!complete.cases(redwine)))
+```
+
+# use rpart
+```{r}
+#library(rpart)
+fit <- rpart(quality ~ ., data = redwine)
+plot(fit)
+text(fit,cex = 0.7)
+printcp(fit) # display the results
+```
+
+
+# Cross validation to select Cp(minimum number of partition).
+
+```{r}
+#library(rpart)
+#library(caret)
+train_rpart <- train(quality ~ ., 
+                     method = "rpart",
+                     tuneGrid = data.frame(cp = seq(0, 0.05, len = 25)),
+                     data = redwine)
+ggplot(train_rpart)
+
+plot(train_rpart$finalModel, margin = 0.1)
+text(train_rpart$finalModel, cex = 0.75)
+```
+
+# Decision trees
+
+```{r}
+train_rpart2 <- train(quality ~ .,
+                     method = "rpart",
+                     tuneGrid = data.frame(cp = seq(0.0, 0.1, len = 25)),
+                     data = redwine$q)
+plot(train_rpart2)
+```
+#Random forest
+```{r}
+library(randomForest)
+fit2 <- randomForest(quality~., data = redwine) 
+plot(fit2)
+#prediction = predict(fit, newdata = redwine)
+#prediction
+```
+
+#Visualization
+
+```{r}
+redwine %>% 
+  mutate(random_forest = predict(fit2)) %>% 
+  ggplot(aes(x = alcohol, y = quality)) + 
+  geom_point() + 
+  geom_col(aes(y = random_forest), color = "darkblue")
+```
+#data partition
+```{r}
+set.seed(5) # makes the random selection of rows reproducible
+train <- redwine$quality %>%
+          createDataPartition(p = 0.70, list = FALSE)
+#head(train)
+
+redwineTrain <- redwine[train,]#%>%
+                        #select("fixed_acidity":"alcohol")
+redwineTest <- redwine[-train,]#%>%
+                          #select("fixed_acidity":"alcohol")
+
+
+head(redwineTrain)
+#typeof(insectSizeLabels2)
+```
+
+#train
+```{r}
+fit3 <- randomForest(quality~., data = redwineTrain) 
+plot(fit3)
+```
+
+#Pred
+```{r}
+pred <- predict(fit3, newdata = redwineTest, predict.all = TRUE)
+confusionMatrix(data = pred,reference =redwineTest )
+```
+
+```{r}
+dim(pred$individual)
+train_rf <- randomForest(y ~ ., data=mnist_27$train)
+
+confusionMatrix(predict(train_rf, mnist_27$test),
+                mnist_27$test$y)$overall["Accuracy"]
+
+
+```
+
